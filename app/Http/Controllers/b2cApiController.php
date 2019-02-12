@@ -65,6 +65,185 @@ class b2cApiController extends Controller
             }
         }
     }
+
+    public function corporateLiveRequest(Request $request){
+        if(strtolower(request()->server()['REQUEST_METHOD']) !== 'post'){
+            return response()->json(['status' => 'error', 'message' => 'Invalid method. Please check that your method is post'], 403);
+        }
+        if($request->product_id != 'CRC005'){
+            return response()->json(['status' => 'error', 'message' => 'Invalid Product. Please note that your are calling Corporate Self Enquiry Endpoint'], 403);
+        }
+        $payload = $request->all();
+        $required_fields = ['email', 'name','reg_num','phone','product_id'];
+        foreach($required_fields as $required){
+            if(!array_key_exists($required, $payload)){
+                return response()->json(['status' => 'errMsg', 'message' => 'Required parameter "'.$required.'" not found'], 403);
+            }
+        }
+        if (\App\User::where('email', $request->email)->exists()){
+            $user = \App\User::where('email', '=', $request->email)->first();
+            if ($user->activate === "inactive"){
+                return response()->json(['status' => 'errMsg', 'message' => 'User is Inactive. Please contact the Administrator for activation'], 403);
+            }
+            if ($user->live_request_username === "null"){
+                return response()->json(['status' => 'errMsg', 'message' => 'User is not yet registered on Live Request App. Please contact the Administrator for registration'], 403);
+            }
+        }
+        $curl = curl_init();
+        $mimie_username = '1A0L199999999903';
+        $mimie_password = 'CRC1.5b2019';
+        $username_static = '39276684crcweb';
+        $password_static = 'W3b5it3U53r2oi9';
+        $username = $user->live_request_username;
+        $password = $user->live_request_password;
+        $report_id = $request->report_id;
+        $response_type = $user->response_type;
+        $name = $request->name;
+        $email = $request->email;
+        $destination_email = $request->destination_email;
+        $reg_num = $request->reg_num;
+        $post_fields_reg_num = "strUserID=$username&strPassword=$password&strRequest=<REQUEST REQUEST_ID=\"1\"><REQUEST_PARAMETERS><REPORT_PARAMETERS RESPONSE_TYPE=\"3\" SUBJECT_TYPE=\"0\" REPORT_ID=\"$report_id\"/><INQUIRY_REASON CODE=\"1\"/><APPLICATION CURRENCY=\"NGN\" AMOUNT=\"0\" NUMBER=\"232\" PRODUCT=\"017\"/></REQUEST_PARAMETERS><SEARCH_PARAMETERS SEARCH-TYPE=\"3\"><BUSINESS_REG_NO>$reg_num</BUSINESS_REG_NO></SEARCH_PARAMETERS></REQUEST>";
+        $post_fields_name = "strUserID=$username&strPassword=$password&strRequest=<REQUEST REQUEST_ID=\"1\"><REQUEST_PARAMETERS><REPORT_PARAMETERS RESPONSE_TYPE=\"3\" SUBJECT_TYPE=\"0\" REPORT_ID=\"$report_id\" /><INQUIRY_REASON CODE=\"1\"/><APPLICATION CURRENCY=\"NGN\" AMOUNT=\"0\" NUMBER=\"232\" PRODUCT=\"017\"/></REQUEST_PARAMETERS><SEARCH_PARAMETERS SEARCH-TYPE=\"0\"><NAME>$name</NAME></SEARCH_PARAMETERS></REQUEST>";
+            
+        if ($request->name != ""){
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 300,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => "POST",
+                CURLOPT_POSTFIELDS => "$post_fields_name",
+                CURLOPT_HTTPHEADER => array(
+                    "Postman-Token: 43da05c1-4997-4972-8b71-345f1f82324a",
+                    "cache-control: no-cache"
+                ),
+            ));
+        }
+        elseif($request->reg_num != ""){
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 300,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => "POST",
+                CURLOPT_POSTFIELDS => "$post_fields_reg_num",
+                CURLOPT_HTTPHEADER => array(
+                    "Postman-Token: 43da05c1-4997-4972-8b71-345f1f82324a",
+                    "cache-control: no-cache"
+                ),
+            ));
+        }
+        
+        $response = curl_exec($curl);
+        $err = curl_error($curl);
+
+        curl_close($curl);
+        $xml2 = array();
+        $reference_number = array();
+        $bureau_id = array();
+        if ($err) {
+            echo "cURL Error #:" . $err;
+        } else {
+            $xml = simplexml_load_string($response);
+            $xml1 = simplexml_load_string($xml);
+            if (!empty($xml1->BODY->{'SEARCH-RESULT-LIST'}->{'SEARCH-RESULT-ITEM'})){
+                $xml2[] = $xml1->BODY->{'SEARCH-RESULT-LIST'}->{'SEARCH-RESULT-ITEM'};
+                $reference_number = $xml1['REFERENCE-NO'];
+                $bureau_id = $xml1->BODY->{'SEARCH-RESULT-LIST'}->{'SEARCH-RESULT-ITEM'}['BUREAU-ID'][0];
+                $xml3[] = $xml1->BODY->{'SEARCH-RESULT-LIST'};
+                // return $reference_number.' '.$bureau_id;
+                // for ($i = 0; $i < count($xml3); $i++){
+                //     //
+                // }
+                
+            }
+            if (!empty($xml1->BODY->{'ERROR-LIST'}->{'ERROR-CODE'})){
+                return $xml1->BODY->{'ERROR-LIST'}->{'ERROR-CODE'};
+            }
+            if (!empty($xml2)){
+                $payload = 
+                    "<REQUEST REQUEST_ID=\"1\">
+                        <REQUEST_PARAMETERS>
+                            <REPORT_PARAMETERS REPORT_ID=\"6112\" SUBJECT_TYPE=\"0\" RESPONSE_TYPE=\"3\"/>
+                            <INQUIRY_REASON CODE=\"1\" />
+                            <APPLICATION PRODUCT=\"017\" NUMBER=\"0\" AMOUNT=\"0\" CURRENCY=\"NGN\"/>
+                            <REQUEST_REFERENCE REFERENCE-NO=\"$reference_number\">
+                                <MERGE_REPORT PRIMARY-BUREAU-ID=\"$bureau_id\">
+                                    <BUREAU_ID>$bureau_id</BUREAU_ID>    
+                                </MERGE_REPORT>  
+                            </REQUEST_REFERENCE>
+                        </REQUEST_PARAMETERS>
+                    </REQUEST>";  
+                $post_fields = "strUserID=$username&strPassword=$password&strRequest=$payload"; 
+                $curl = curl_init();
+
+                curl_setopt_array($curl, array(
+                CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => "POST",
+                CURLOPT_POSTFIELDS => "$post_fields",
+                CURLOPT_HTTPHEADER => array(),
+                ));
+
+                $response = curl_exec($curl);
+                $err = curl_error($curl);
+
+                curl_close($curl);
+
+                if ($err) {
+                    echo "cURL Error #:" . $err;
+                } else {
+                    $folderPath = "storage/live-request/";
+                    $xml = simplexml_load_string($response);
+                    $xml1 = simplexml_load_string($xml);
+                    $decoded = base64_decode($xml1->PDFResponse);
+                    echo $decoded;
+                    $file = $folderPath . $name . '.pdf';
+                    file_put_contents($file, $decoded);
+                    Mail::to($destination_email)->queue(new LiveRequestReport($file));
+                    // if (file_exists($file)) {
+                    //     header('Content-Description: File Transfer');
+                    //     header('Content-Type: application/octet-stream');
+                    //     header('Content-Disposition: attachment; filename="'.basename($file).'"');
+                    //     header('Expires: 0');
+                    //     header('Cache-Control: must-revalidate');
+                    //     header('Pragma: public');
+                    //     header('Content-Length: ' . filesize($file));
+                    //     readfile($file);
+                    //     exit;
+                    // }
+                }
+            }
+            $folderPath = "storage/live-request/";
+            $xml = simplexml_load_string($response);
+            $xml1 = simplexml_load_string($xml);
+            $decoded = base64_decode($xml1->PDFResponse);
+            echo $decoded;
+            $file = $folderPath . $name . '.pdf';
+            file_put_contents($file, $decoded);
+            Mail::to($destination_email)->queue(new LiveRequestReport($file));
+            // if (file_exists($file)) {
+            //     header('Content-Description: File Transfer');
+            //     header('Content-Type: application/octet-stream');
+            //     header('Content-Disposition: attachment; filename="'.basename($file).'"');
+            //     header('Expires: 0');
+            //     header('Cache-Control: must-revalidate');
+            //     header('Pragma: public');
+            //     header('Content-Length: ' . filesize($file));
+            //     readfile($file);
+            //     exit;
+            // }
+        }
+    }
+
     public function postLiveRequest(Request $request){
 
         if(strtolower(request()->server()['REQUEST_METHOD']) !== 'post'){
@@ -101,31 +280,17 @@ class b2cApiController extends Controller
             $email = $request->email;
             $destination_email = $request->destination_email;
             $bvn = $request->bvn;
-            if ($request->report_id == true){
+            if ($request->report_id != ""){
                 $report_id = $request->report_id;
             }
             else{
                 $report_id = $user->product_type;
             }
+            
             $post_fields = "strUserID=$username&strPassword=$password&strRequest=<REQUEST REQUEST_ID=\"1\"> <REQUEST_PARAMETERS> <REPORT_PARAMETERS REPORT_ID=\"$report_id\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"$response_type\" /> <INQUIRY_REASON CODE=\"1\"/> <APPLICATION PRODUCT=\"0\" NUMBER=\"0\" AMOUNT=\"0\" CURRENCY=\"NGN\" /> </REQUEST_PARAMETERS> <SEARCH_PARAMETERS SEARCH-TYPE=\"0\"> <NAME>$names</NAME> <SURROGATES> <GENDER VALUE=\"$gender\"/> <DOB VALUE=\"$dob\"/> </SURROGATES> </SEARCH_PARAMETERS> </REQUEST>";
             $post_fields_bvn = "strUserID=$username&strPassword=$password&strRequest=<REQUEST REQUEST_ID=\"1\"><REQUEST_PARAMETERS><REPORT_PARAMETERS RESPONSE_TYPE=\"$response_type\" SUBJECT_TYPE=\"1\" REPORT_ID=\"$report_id\"/><INQUIRY_REASON CODE=\"1\"/><APPLICATION CURRENCY=\"NGN\" AMOUNT=\"0\" NUMBER=\"232\" PRODUCT=\"017\"/></REQUEST_PARAMETERS><SEARCH_PARAMETERS SEARCH-TYPE=\"4\"><BVN_NO>$bvn</BVN_NO></SEARCH_PARAMETERS> </REQUEST>";
-            if ($bvn != ""){
-                curl_setopt_array($curl, array(
-                    CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_ENCODING => "",
-                    CURLOPT_MAXREDIRS => 10,
-                    CURLOPT_TIMEOUT => 300,
-                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                    CURLOPT_CUSTOMREQUEST => "POST",
-                    CURLOPT_POSTFIELDS => "$post_fields_bvn",
-                    CURLOPT_HTTPHEADER => array(
-                        "Postman-Token: 43da05c1-4997-4972-8b71-345f1f82324a",
-                        "cache-control: no-cache"
-                    ),
-                ));
-            }
-            elseif ($names != ""){
+            
+            if ($names != ""){
                 curl_setopt_array($curl, array(
                     CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
                     CURLOPT_RETURNTRANSFER => true,
@@ -135,6 +300,22 @@ class b2cApiController extends Controller
                     CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                     CURLOPT_CUSTOMREQUEST => "POST",
                     CURLOPT_POSTFIELDS => "$post_fields",
+                    CURLOPT_HTTPHEADER => array(
+                        "Postman-Token: 43da05c1-4997-4972-8b71-345f1f82324a",
+                        "cache-control: no-cache"
+                    ),
+                ));
+            }
+            elseif ($bvn != ""){
+                curl_setopt_array($curl, array(
+                    CURLOPT_URL => "https://webserver.creditreferencenigeria.net/crcweb/liverequestinvoker.asmx/PostRequest",
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_ENCODING => "",
+                    CURLOPT_MAXREDIRS => 10,
+                    CURLOPT_TIMEOUT => 300,
+                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                    CURLOPT_CUSTOMREQUEST => "POST",
+                    CURLOPT_POSTFIELDS => "$post_fields_bvn",
                     CURLOPT_HTTPHEADER => array(
                         "Postman-Token: 43da05c1-4997-4972-8b71-345f1f82324a",
                         "cache-control: no-cache"
@@ -202,7 +383,7 @@ class b2cApiController extends Controller
                             $payload = 
                                 "<REQUEST REQUEST_ID=\"1\">
                                     <REQUEST_PARAMETERS>
-                                        <REPORT_PARAMETERS REPORT_ID=\"6110\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"3\"/>
+                                        <REPORT_PARAMETERS REPORT_ID=\"$report_id\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"3\"/>
                                         <INQUIRY_REASON CODE=\"1\" />
                                         <APPLICATION PRODUCT=\"017\" NUMBER=\"0\" AMOUNT=\"0\" CURRENCY=\"NGN\"/>
                                         <REQUEST_REFERENCE REFERENCE-NO=\"$reference_number\">
@@ -323,7 +504,7 @@ class b2cApiController extends Controller
                             $payload = 
                                 "<REQUEST REQUEST_ID=\"1\">
                                     <REQUEST_PARAMETERS>
-                                        <REPORT_PARAMETERS REPORT_ID=\"6110\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"3\"/>
+                                        <REPORT_PARAMETERS REPORT_ID=\"$report_id\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"3\"/>
                                         <INQUIRY_REASON CODE=\"1\" />
                                         <APPLICATION PRODUCT=\"017\" NUMBER=\"0\" AMOUNT=\"0\" CURRENCY=\"NGN\"/>
                                         <REQUEST_REFERENCE REFERENCE-NO=\"$reference_number\">
@@ -418,7 +599,7 @@ class b2cApiController extends Controller
                             $payload = 
                                 "<REQUEST REQUEST_ID=\"1\">
                                     <REQUEST_PARAMETERS>
-                                        <REPORT_PARAMETERS REPORT_ID=\"6110\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"1\"/>
+                                        <REPORT_PARAMETERS REPORT_ID=\"$report_id\" SUBJECT_TYPE=\"1\" RESPONSE_TYPE=\"1\"/>
                                         <INQUIRY_REASON CODE=\"1\" />
                                         <APPLICATION PRODUCT=\"017\" NUMBER=\"0\" AMOUNT=\"0\" CURRENCY=\"NGN\"/>
                                         <REQUEST_REFERENCE REFERENCE-NO=\"$reference_number\">

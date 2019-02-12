@@ -19,9 +19,10 @@ class IconController extends Controller
     }
     function test()
     {
-        $email = 'email@email.com';
+        $email = 'ademola.adewumi@crccreditbureau.com';
         $bvn = '22145793506';
-        $test = $this->connection->select("select * from AA_INDIVIDUAL_SUB_DETAILS704 where email = '$email'");
+        $firstname = 'Popoola';
+        $test = $this->connection->select("select * from aa_individual_sub_details where email = '$email'");
         return $test;
         //$this->connection->table('AA_INDIVIDUAL_SUB_DETAILS704')->insert(['email' => $email]);
     }
@@ -31,7 +32,7 @@ class IconController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Invalid method. Please check that your method is post'], 403);
         }
         $payload = $request->all();
-        $required_fields = ['email', 'acc_num','bvn','phone','product_id','gender','dob','names','customer_email'];
+        $required_fields = ['email', 'acc_num','bvn','phone','product_id','gender','dob','customer_email','firstname','lastname'];
         foreach($required_fields as $required){
             if(!array_key_exists($required, $payload)){
                 return response()->json(['status' => 'errMsg', 'message' => 'Required parameter "'.$required.'" not found'], 403);
@@ -43,16 +44,21 @@ class IconController extends Controller
                 return response()->json(['status' => 'errMsg', 'message' => 'User is Inactive. Please contact the Administrator for activation'], 403);
             }
 
-            $names = $request->names;
             $gender = $request->gender;
             $dob = $request->dob;
             $email = $request->customer_email;
             $bvn = $request->bvn;
             $acc_num = $request->acc_num;
             $phone = $request->phone;
+            $firstname = $request->firstname;
+            if(isset($request->middlename)){
+                $middlename = $request->middlename;
+            }
+            $lastname = $request->lastname;
 
+            //CON Plus
             if ($request->product_id === "CRC004"){
-                $this->connection->table('aa_individual_sub_details')->insert(['email' => $email, 'dateofbirth' => $dob, 'bvn' => $bvn, 'gender' => $gender, 'name' => $names, 'contactno1' => $phone, 'type' => 'COMM']);
+                $this->connection->table('aa_individual_sub_details')->insert(['email' => $email, 'dateofbirth' => $dob, 'bvn' => $bvn, 'gender' => $gender, 'name' => $names, 'contactno1' => $phone, 'type' => 'COMM', 'firstname' => $firstname, 'middlename'=> $middlename, 'lastname' => $lastname]);
                 \DB::table('users')->where('email', $request->email)->increment('hits');
                 $b2c = new B2c;
                 $b2c->email = $request->email;
@@ -63,8 +69,14 @@ class IconController extends Controller
                 Mail::to($email)->queue(new LiveRequestReport($file));
                 return response()->json(['status' => 'success', 'message' => 'Succesfully made Con Plus request. Expect a response soon.'], 403);
             }
+            //iCON Plus
             elseif($request->product_id === "CRC003"){
-                $this->connection->table('aa_individual_sub_details')->insert(['email' => $email, 'dateofbirth' => $dob, 'bvn' => $bvn, 'gender' => $gender, 'name' => $names, 'contactno1' => $phone, 'type' => 'CONS']);
+                if ($request->middlename === ""){
+                    $this->connection->table('aa_individual_sub_details')->insert(['email' => $email, 'dateofbirth' => $dob, 'bvn' => $bvn, 'gender' => $gender, 'contactno1' => $phone, 'type' => 'CONS', 'firstname' => $firstname, 'lastname' => $lastname]);
+                }
+                elseif ($request->middlename != ""){
+                    $this->connection->table('aa_individual_sub_details')->insert(['email' => $email, 'dateofbirth' => $dob, 'bvn' => $bvn, 'gender' => $gender, 'contactno1' => $phone, 'type' => 'CONS', 'firstname' => $firstname, 'middlename'=> $middlename, 'lastname' => $lastname]);
+                }
                 \DB::table('users')->where('email', $request->email)->increment('hits');
                 $b2c = new B2c;
                 $b2c->email = $request->email;

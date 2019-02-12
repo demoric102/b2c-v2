@@ -19,8 +19,12 @@ Route::middleware('auth:api')->post('/liveRequest', function (Request $request) 
 
 Route::post('v1/post/live-request', 'b2cApiController@postLiveRequest')->middleware('auth:api');
 
+Route::post('v1/post/corporate-live-request', 'b2cApiController@corporateLiveRequest')->middleware('auth:api');
+
 Route::post('v1/post/live-request-test', 'b2cApiController@testLiveRequest')->middleware('auth:api');
 
 Route::post('v1/post/fico-request', 'b2cApiController@postFicoRequest')->middleware('auth:api');
 
 Route::post('v1/post/icon', 'IconController@icon')->middleware('auth:api');
+
+Route::post('v1/post/icon/test', 'IconController@test')->middleware('auth:api');
